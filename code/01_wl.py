@@ -27,7 +27,7 @@ class WLagent(core.Agent):
     def save(self) -> Tuple:
         return self.uid
 
-agent_cache = {}
+#agent_cache = {}
 
 def restore_agent(agent_data: Tuple):
     uid=agent_data
@@ -104,8 +104,9 @@ class Model:
         tick=self.runner.tick()
         activeRank=tick % self.size
         counterpartRank=repastrandom.default_rng.choice(self.allRanks)
-        #this variable will allow point-to-point communication below in the code
+        #next variable will allow point-to-point communication below in the code
         chosenFromOtherRanks=False
+        interactionBetweenRanks=False
 #        print('-- tick '+str(tick)+' active r '+str(activeRank)+' self r '+str(self.rank)+' receiving rank '+str(counterpartRank))
         ##active rank choose his agent and another agent to interact with
         if self.rank == activeRank:
@@ -114,19 +115,13 @@ class Model:
             aWL=self.context.agent((localAgentID,0,self.rank))
             counterpartID=repastrandom.default_rng.integers(5,size=1)[0]
             counterpartTuple=(counterpartID,0,counterpartRank)
-            #add the sender rank id to allow point to point communication below
-            tupleToSend=(counterpartTuple,activeRank)
-            print('local agent '+str(aWL.uid)+' interact with '+str(counterpartTuple))
-            #because destination rank is random, we have to send to all ranks except the active one.
-            for aRank in self.otherRanks:
-                self.comm.send(tupleToSend,aRank)
             if self.rank == counterpartRank:
                 if localAgentID == counterpartID:
                     otherAgentsIDs=list(range(5))
                     otherAgentsIDs.pop(localAgentID)
                     counterpartID=repastrandom.default_rng.choice(otherAgentsIDs)
-                    print('agent ',localAgentID,' interacts with ',anotherLocalAgentID)
-                counterpartTuple=(counterpartID,0,counterpartRank)
+                    counterpartTuple=(counterpartID,0,counterpartRank)
+                print('local interaction in rank ',str(activeRank),': agent ',localAgentID,' interacts with agent ',counterpartID)
                 aSecondLocalWL=self.context.agent(counterpartTuple)
                 moneySum=aWL.money+aSecondLocalWL.money
                 print('sum of meoney holdings ',moneySum)
@@ -138,7 +133,14 @@ class Model:
                 aWL.money=localAgentMoney
                 aSecondLocalWL.money=secondLocalAgentMoney
                 print('The two local agents money was updated')
- 
+            else:
+                interactionBetweenRanks=True
+                print('local agent '+str(aWL.uid)+' interact with '+str(counterpartTuple))
+            #add the sender rank id to allow point to point communication below
+            tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
+            #because destination rank is random, we have to send to all ranks except the active one.
+            for aRank in self.otherRanks:
+                self.comm.send(tupleToSend,aRank)
 
         ##All the remote ranks receive info from active rank. The selected rank get the agent, watch his money and send the information to the active rank
         else:
@@ -146,6 +148,7 @@ class Model:
             data=self.comm.recv(source=activeRank)
             print('tick '+str(tick)+' active r '+str(activeRank)+' self r '+str(self.rank)+' received data '+str(data))
             agTuple=data[0]
+            interactionBetweenRanks=data[2]
             if agTuple[2]==self.rank:
                 chosenFromOtherRanks=True
                 talkingWith=data[1]
@@ -154,7 +157,7 @@ class Model:
                 self.comm.send(tmpWL.money,talkingWith)
                 print('information sent to rank ',str(talkingWith),' money ',tmpWL.money)
         ##Active rank receive info on money from the remote rank
-        if self.rank == activeRank and counterpartRank != activeRank:
+        if self.rank == activeRank and interactionBetweenRanks:
             recWallet=self.comm.recv(source=counterpartRank)
             print('information received from rank ',counterpartRank,': money = ',recWallet)
             moneySum=aWL.money+recWallet
@@ -170,7 +173,7 @@ class Model:
             print("remote agent's money info sent to rank ", counterpartRank)
         ##Remote rank receive information from active rank and update his agents's money
         else:
-            if chosenFromOtherRanks:
+            if chosenFromOtherRanks and interactionBetweenRanks:
                 newMoney=self.comm.recv(source=talkingWith)
                 print('Information received from rank ',talkingWith,' money ',newMoney)
                 tmpWL.money=newMoney
