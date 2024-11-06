@@ -1,0 +1,278 @@
+\documentclass{article}
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\begin{document}
+\section{Winners-losers models}
+In the Winners-Losers model, after an interaction, both the agents have
+to change their state.
+
+The algorithm of the Winners-Losers model is as follows:
+
+\vskip2mm
+\noindent\textbf{Model 1}
+\vskip1mm
+\hrule
+
+\begin{itemize}
+\tightlist
+\item
+  create a population of agents
+\item
+  initialize their money holding to a given amount (say 1)
+\item
+  at each time
+
+  \begin{itemize}
+  \tightlist
+  \item
+    two agents are randomly drawn from the population
+  \item
+    they pool their money holdings
+  \item
+    the pooled money is reassigned to the two agents giving a random
+    share to the first agent and the rest to the other agent.
+  \end{itemize}
+\end{itemize}
+\vskip-2mm
+\hrule
+
+\vskip4mm
+This dynamics is very simple, but we can have some extreme cases. For
+example, an agent can be never chosen.
+
+If we want to avoid these cases, we can modify our main loop as follows
+
+\vskip2mm
+\noindent\textbf{Model 2}
+\vskip1mm
+\hrule
+
+\begin{itemize}
+\tightlist
+\item
+  at each time step
+
+  \begin{itemize}
+  \tightlist
+  \item
+    each agent
+
+    \begin{itemize}
+    \tightlist
+    \item
+      choose randomly another agent
+    \item
+      the two agents pool and share the money as before
+    \end{itemize}
+  \end{itemize}
+\end{itemize}
+
+\vskip-2mm
+\hrule
+
+\vskip4mm
+
+In this implementation, each agent has at least an exchange at each time
+step. Some agents can have multiple exchanges if it is chosen by
+different agents.
+
+In a more complicate variant, a choosing agent can observe a number of other agents an choose one of them according to some criterium. The main loop can be as follows
+
+\vskip2mm
+\noindent\textbf{Model 3}
+\vskip1mm
+\hrule
+
+\begin{itemize}
+\tightlist
+\item
+  at each time step
+
+  \begin{itemize}
+  \tightlist
+  \item
+    each agent
+
+    \begin{itemize}
+    \tightlist
+    \item
+      choose a set of other agents
+    \item
+      choose one agent in the set according to some preference criterion
+    \item
+      the two agents pool and share the money as before
+    \end{itemize}
+  \end{itemize}
+\end{itemize}
+
+\vskip-2mm
+\hrule
+
+\vskip4mm
+
+The model is so simple that its straightforward implementation does not require an agent-based approach. One could create an array of money holdings, take two of them at each iteration and update them according to the rule seen above.
+
+Because we are interested in agent-based models, we will proceed with the agent-based implementation as a tutorial towards more advanced models.  
+
+Among the many available platforms we will use the Repast suite.
+
+\section{The Repast suite}
+
+Repast provides facilities to run agent-based simulation.
+
+It comes in three different toolkits. 
+The classic one is ``Repast Simphony'', a java-based toolkit designated for use in personal computer and small clusters.  
+
+The increase in computer availability brought the development team to release the ``Repast for High Performance Computing'' toolkit, that is a ``C++-based distributed agent-based modeling toolkit that is designed for use on large computing clusters and supercomputers.'' 
+
+The most recent toolkit is ``Repast for Python''. ``It is a Python-based distributed agent-based modeling toolkit to apply large-scale distributed ABM methods.'' 
+
+All the mentioned Repast toolkits provide facilities to implement agent-based models such as:
+\begin{itemize}
+\tightlist
+	\item a scheduler to controls the dynamic of the simulation
+	\item spatial structures such as grids or continuous 2d space to locate agents
+	\item network structures
+	\item \ldots
+\end{itemize}
+
+We plan to use ``Repast for Python'' that is the most up-to-date toolkit in the Repast family. In addition to the previous mentioned facilities, it builds some of its functions on mpi4py to ease the management of parallel computation.
+
+In the following section we will deal with the following implementations of winners-losers model 1:
+\begin{itemize}
+	\item WL model without agents coded in python (without Repast functions)
+	\item WL model with agents in a no parallel setting (Using Repast facilities excluded those for parallel computation)
+	\item WL model with agents in a parallel setting (Using repast facilities excluded those for parallel computation. The parallel computation is implemented using mpi4py functions)
+	\item WL model with agents in a parallel setting (Using repast facilities including those for parallel computation.)
+\end{itemize}
+
+\section{Model 1}
+\subsection{Implementation}
+
+The implementation can be performed without agents.
+
+\subsection{Parallelization}
+
+We will describe hereafter how to parallelize the various version of the
+WL model using Repast4py.
+
+
+In the basic version, we have an interaction for each time tick. The
+closer exercise in a parallel setting is to make subsequent interaction
+to be performed on different processes (or ranks). Although this is not
+a true parallelization, it will serve to understand communication among
+ranks.
+
+Algorithm
+
+\begin{itemize}
+\tightlist
+\item
+  at each time tick
+
+  \begin{itemize}
+  \tightlist
+  \item
+    choose a rank (say Ra)
+  \item
+    Ra chooses a rank (say Rb)
+  \item
+    if Ra == Rb the interaction is local
+
+    \begin{itemize}
+    \tightlist
+    \item
+      choose two agents in Ra,
+    \item
+	    check that the two agents are different, id not change the second agent with a different one
+    \item
+      pool their money holding and reallocate it randomly
+    \end{itemize}
+  \item
+    else
+
+    \begin{itemize}
+    \tightlist
+    \item
+      choose an agent in Ra (say ARa)
+    \item
+      ARa builds a reference to an agent in Rb
+    \item
+	    Ra informs all other ranks that he selected Rb (MPI send)
+    \item
+	    all other ranks receive the new (MPI receive)
+    \item
+	    Rb discover he was chosen and sets the chosen flag to allow point-to-point communications
+	    
+	    Rb gets ARb and extract its money holdings
+      %ra requests the agent to rb (the ghost of the agent is created in rank1 say GAR2inR1)
+    \item
+	    Rb send to Ra the info on ARb's money holdings (MPI send)
+%      AR1 interact with GAR2inR1, AR1 changes its variable and take note of AR2 variable
+    \item
+	    Ra receive the info (MPI receive)
+
+	    Ra pool resources and reallocate them
+
+	    Ra updates ARa money holdings
+    \item
+	    Ra send this information on ARb new money holding
+    \item
+	    Rb receive the information (MPI receive)
+
+	    Rb update ARb's money holding
+    \end{itemize}
+  \end{itemize}
+\end{itemize}
+
+A PARALLEL implementation with Repast4py can be as follows:
+
+\begin{itemize}
+\tightlist
+\item
+  Store information on how many ranks there are and how many agents are
+  in each rank
+\item
+  in each rank at each time step
+
+  \begin{itemize}
+  \tightlist
+  \item
+    create RL1 (an empty list where to store agents to be requested to
+    other ranks)
+  \item
+    each agent
+
+    \begin{itemize}
+    \tightlist
+    \item
+      create AL1 (an empty list where to store ids of agents that will
+      be chosen in next 2 steps)
+    \item
+      randomly draw a rank (or n ranks)
+    \item
+      randomly draw an agent id belonging to each rank chosen in the
+      previous step
+    \item
+      add agents ids to AL1
+    \item
+      if rank is different from current rank add id to RL1, but only if
+      the id is not yet in RL1 (this is because we will explain below
+      that a ghosted agent can be involved at most in an exchange)
+    \end{itemize}
+  \item
+    current rank request RL1. As a result current rank create ghosts and
+    other ranks accounts for ghosted
+  \end{itemize}
+\end{itemize}
+
+Now we have to make sure that each ghost is involved in at most a
+transaction. The ghosted list can help in identifying if an agent is
+ghosted in more than a rank. We have to delete ghost in such a way that
+the agent has only one ghost.
+
+Now exchanges can be performed. Local exchanges can be accounted
+immediately exchanges with ghost are registered in a list
+
+The rank send the list and the receiving rank update the agent holding
+\end{document}
