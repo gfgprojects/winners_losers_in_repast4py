@@ -124,7 +124,7 @@ class Model:
                 print('local interaction in rank ',str(activeRank),': agent ',localAgentID,' interacts with agent ',counterpartID)
                 aSecondLocalWL=self.context.agent(counterpartTuple)
                 moneySum=aWL.money+aSecondLocalWL.money
-                print('sum of meoney holdings ',moneySum)
+                print('sum of money holdings ',moneySum)
                 share=repastrandom.default_rng.random()
                 print('share ',share)
                 localAgentMoney=moneySum*share
@@ -152,7 +152,7 @@ class Model:
             if agTuple[2]==self.rank:
                 chosenFromOtherRanks=True
                 talkingWith=data[1]
-                print('THIS AGENT IS IN MY RANK talking with rank ',talkingWith)
+                print('this agent is in my rank, talking with rank ',talkingWith)
                 tmpWL=self.context.agent(agTuple)
                 self.comm.send(tmpWL.money,talkingWith)
                 print('information sent to rank ',str(talkingWith),' money ',tmpWL.money)
