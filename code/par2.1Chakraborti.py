@@ -16,7 +16,6 @@ def T():
     return time.time() - startTime
 
 elapsedTime=T();
-print(elapsedTime)
 
 random.seed(123)
 
@@ -37,7 +36,9 @@ for i in range (480000):
     v[b]=(1-q)*tot
 
 elapsedTime=T();
-print(elapsedTime)
+print()
+print('seconds elapsed since beginning: ',str(round(elapsedTime,2)))
+print()
 
 #plt.hist(v,200);
 #plt.show()
