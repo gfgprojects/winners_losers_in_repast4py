@@ -158,7 +158,7 @@ WL model using Repast4py.
 
 
 In the basic version, we have an interaction for each time tick. The
-closer exercise in a parallel setting is to make subsequent interaction
+closer exercise to the basic model in a parallel setting is to make subsequent interaction
 to be performed on different processes (or ranks). Although this is not
 a true parallelization, it will serve to understand communication among
 ranks.
@@ -175,18 +175,19 @@ Algorithm
   \item
     choose a rank (say Ra)
   \item
-    Ra chooses a rank (say Rb)
+	  Ra chooses a rank (say Rb, note that Rb can be equal to Ra. In this case we will have a local interaction)
+  \item
+    Ra choose an agent (say ARa)
+   \item
+	   ARa builds a reference to an agent in Rb (say ARb)
   \item
     if Ra == Rb the interaction is local
-
     \begin{itemize}
-    \tightlist
+		    \tightlist
     \item
-      choose two agents in Ra,
+	    check that ARb and ARa are different, if not change the second agent with a different one
     \item
-	    check that the two agents are different, id not change the second agent with a different one
-    \item
-      pool their money holding and reallocate it randomly
+      pool the two agents' money holdings and reallocate the sum randomly
     \end{itemize}
   \item
     else
@@ -194,11 +195,7 @@ Algorithm
     \begin{itemize}
     \tightlist
     \item
-      choose an agent in Ra (say ARa)
-    \item
-      ARa builds a reference to an agent in Rb
-    \item
-	    Ra informs all other ranks that he selected Rb (MPI send)
+	    Ra informs all other ranks that he selected Rb, its rank number and that the interaction is not local (MPI send)
     \item
 	    all other ranks receive the new (MPI receive)
     \item
@@ -216,7 +213,7 @@ Algorithm
 
 	    Ra updates ARa money holdings
     \item
-	    Ra send this information on ARb new money holding
+	    Ra send information on ARb new money holding
     \item
 	    Rb receive the information (MPI receive)
 
@@ -224,6 +221,60 @@ Algorithm
     \end{itemize}
   \end{itemize}
 \end{itemize}
+
+An implementation of the algorithm is provided in the python script \verb+01_wl.py+.
+
+The command
+\verb+mpirun -n 4 python 01_wl.py+ executes the model in 4 ranks.
+By inserting several print statements, we can verify how the code works on the 4 ranks. The output from time tick 1 and 2 is reported hereafter.
+
+
+\footnotesize
+\begin{verbatim}
+RANK 1                                     RANK 2
+-- tick 1 ----------------------------------------------------------------------------
+updating rank 1 at tick 1 active rank 1
+local interaction in rank  1:          
+      agent  2  interacts with agent  0    tick 1 active r 1 self r 2 
+                                                    received data ((0, 0, 1), 1, False)
+sum of money holdings  2
+share  0.06755543644766471
+money to local agent  0.135  
+    money to second local agent  1.864 
+The two local agents money was updated 
+-- tick 2 ----------------------------------------------------------------------------
+                                           updating rank 2 at tick 2 active rank 2
+                                           local agent (3, 0, 2) interact with (2, 0, 1)
+tick 2 active r 2 self r 1 
+       received data ((2, 0, 1), 2, True)
+this agent is in my rank, talking with rank 2
+information sent to rank 2 money 0.135
+                                           information received from rank 1: money 0.135
+                                           sum of money holdings  1.135
+                                           share  0.86
+                                           money to local agent  0.976
+                                                    money to remote agent  0.158
+                                           local agent's money updated
+Information received from rank 2 money 0.158
+agent  (2, 0, 1)  money updated
+--------------------------------------------------------------------------------------
+
+
+RANK 0                                     RANK 3
+-- tick 1 ----------------------------------------------------------------------------
+tick 1 active r 1 self r 0                 tick 1 active r 1 self r 3 
+      received data ((0, 0, 1), 1, False)  received data ((0, 0, 1), 1, False)
+-- tick 2 ----------------------------------------------------------------------------
+tick 2 active r 2 self r 0                 tick 2 active r 2 self r 3
+      received data ((2, 0, 1), 2, True)   received data ((2, 0, 1), 2, True)
+--------------------------------------------------------------------------------------
+\end{verbatim}
+\normalsize
+
+It is interesting to note that agent 2 in rank 1 is involved in both time tick.
+In the first time tick he randomly choose agent 0 in the same rank.
+In time tick 2 he is selected by agent 3 in rank 2 as a partner for interaction. Therefore rank 1 send information on agent's 2 money holding to rank 2.
+Rank 2 performs the computation and send back information on rank 1's agent's money holdings. Finally, rank 1 updates the agent's state.
 
 A PARALLEL implementation with Repast4py can be as follows:
 
