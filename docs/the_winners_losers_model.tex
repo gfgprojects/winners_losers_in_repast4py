@@ -303,7 +303,7 @@ tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
 and send it to all the other ranks
 \begin{verbatim}
 for aRank in self.otherRanks:
-self.comm.send(tupleToSend,aRank)
+   self.comm.send(tupleToSend,aRank)
 \end{verbatim}
 all the other ranks receive the sent tuple. They now know which is the requested agent, the sender rank, and the interaction is between ranks.
 Analyzing the requested agent tuple, each rank can establish if it is involved. The code is as follows:
@@ -337,21 +337,26 @@ newMoney=self.comm.recv(source=talkingWith)
 tmpWL.money=newMoney
 \end{verbatim}
 
-The first part of the code commented above can be implemented in an alternative way that allows to use another interesting MPI function.
-We are referring in particular to the part in which the active rank informs all the other rank. Above we implemented this part as follows:
+The first part of the code described above can be implemented in an alternative way that allows the use of another interesting MPI function.
+We are referring in particular to the part in which the active rank informs all the other ranks. Above we implemented this part as follows:
 \begin{verbatim}
 for aRank in self.otherRanks:
-self.comm.send(tupleToSend,aRank)
+   self.comm.send(tupleToSend,aRank)
 \end{verbatim}
-however, we can avoid the for loop using the MPI broadcast function as follows.
+however, we can avoid the for loop using the MPI broadcast function.
 To make it works, the active rank define the \verb+tupleToSend+ as before. All the other rank as to define the same variable, setting it to \verb+None+.
-Finally, all the rank call the \verb+bcast+ function
+Finally, all the rank call the \verb+bcast+ function as follows:
 \begin{verbatim}
 data=self.comm.bcast(tupleToSend,root=activeRank)
 \end{verbatim}
-then the code proceed as before.
+afteward, the code proceed as before.
 
 The version of the code using the \verb+bcast+ function in provided in the \verb+01_wl_bcast.py+ script.
+
+It can be run with the following command:
+\begin{verbatim}
+mpirun -n 4 python 01_wl_bcast.py
+\end{verbatim}
 
 \section{Model 1 parallel with ghosts}
 
@@ -359,7 +364,7 @@ We will describe hereafter how to parallelize the model using Repast4py.
 
 Till now, in case of interaction between two agents in two different ranks, the ranks send and receive information to allow their agents to update their states.
 
-Repast4py is based on a mechanism that enrich each rank with copies of agents that the rank would had not access to.
+Repast4py is based on a mechanism that add to each rank copies of agents that the rank would had not access to.
 
 A key function for achieving the result is \verb+request_agents()+ belonging to the context module.
 
@@ -374,7 +379,7 @@ The other ranks take the requested agents and ask them to save their current sta
 	\item 
 The collected tuples are send back to the requesting rank
 	\item 
-		The requesting rank uses the received information to create agents. In particular, the rank creates an agent identical to the one which is in the rank for each received tuple. The newly created agents are called ghosts. And are stored in a list.
+		The requesting rank uses the received information to create agents. In particular, the rank creates an agent identical to the one which is in the rank for each received tuple. The newly created agents are called ghosts. They are stored in a dedicated list.
 	\item 
 		Afterwards, the interaction can be performed locally between the agent and a ghost. The ghost is taken from the rank's ghost list.
 \end{itemize}
@@ -385,7 +390,7 @@ First, the user has to endow agents with a \verb+save(....)+ function.
 Repast allows each rank to collect information from requested agent. In particular it calls an agents' function called \verb+save(....)+.
 Therefore, the user has to endow the agent with the save function. This function could not be implemented by the Repast team because it is model specific (agents are different among models, and the tuple returned by \verb+save+ can be shaped only by the modeler).
 
-The second code integration consist in providing a function accessible at rank level whose role is to create new agents given a tuple with the same structure of \verb+save+ return. This function is the second input argument \verb+request_agent+. The function can be named at the modeler convenience, however, the repast convention is to call it \verb+restore_agent(....)+   
+The second code integration consist in providing a function accessible at rank level whose role is to create new agents given a tuple with the same structure of \verb+save+ return. This function is the second input argument of \verb+request_agent+. The function can be named at the modeler convenience, however, the repast convention is to call it \verb+restore_agent(....)+   
 
 
 \section{Model 2 parallel implementation with ghosts}
