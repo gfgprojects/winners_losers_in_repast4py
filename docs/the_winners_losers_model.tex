@@ -146,12 +146,12 @@ In the following section we will deal with the following implementations of winn
 	\item WL model with agents in a parallel setting (Using repast facilities including those for parallel computation.)
 \end{itemize}
 
-\section{Model 1}
+\section{Model 1 without agents}
 \subsection{Implementation}
 
 The implementation can be performed without agents.
 
-\subsection{Parallelization}
+\section{Model 1 parallel without ghosts}
 
 We will describe hereafter how to parallelize the various version of the
 WL model using Repast4py.
@@ -276,7 +276,41 @@ In the first time tick he randomly choose agent 0 in the same rank.
 In time tick 2 he is selected by agent 3 in rank 2 as a partner for interaction. Therefore rank 1 send information on agent's 2 money holding to rank 2.
 Rank 2 performs the computation and send back information on rank 1's agent's money holdings. Finally, rank 1 updates the agent's state.
 
-A PARALLEL implementation with Repast4py can be as follows:
+\section{Model 1 parallel with ghosts}
+
+Till now, in case of interaction between two agents in two different ranks, the ranks send and receive information to allow their agents to update their states.
+
+Repast4py is based on a mechanism that enrich each rank with copies of agents that the rank would had not access to.
+
+A key function for achieving the result is \verb+request_agents()+ belonging to the context module.
+
+The mechanism works as follows:
+
+\begin{itemize}
+	\tightlist
+	\item 
+\verb+request_agents+ sends to the other ranks the ids of agents asked for by a rank
+	\item 
+The other ranks take the requested agents and ask them to save their current state in a tuple.
+	\item 
+The collected tuples are send back to the requesting rank
+	\item 
+		The requesting rank uses the received information to create agents. In particular, the rank creates an agent identical to the one which is in the rank for each received tuple. The newly created agents are called ghosts. And are stored in a list.
+	\item 
+		Afterwards, the interaction can be performed locally between the agent and a ghost. The ghost is taken from the rank's ghost list.
+\end{itemize}
+
+To make this mechanism work, the user has to perform two setups.
+
+First, the user has to endow agents with a \verb+save(....)+ function.
+Repast allows each rank to collect information from requested agent. In particular it calls an agents' function called \verb+save(....)+.
+Therefore, the user has to endow the agent with the save function. This function could not be implemented by the Repast team because it is model specific (agents are different among models, and the tuple returned by \verb+save+ can be shaped only by the modeler).
+
+The second code integration consist in providing a function accessible at rank level whose role is to create new agents given a tuple with the same structure of \verb+save+ return. This function is the second input argument \verb+request_agent+. The function can be named at the modeler convenience, however, the repast convention is to call it \verb+restore_agent(....)+   
+
+
+\section{Model 2 parallel implementation with ghosts}
+A parallel implementation of model 2 with Repast4py ghosts can be as follows:
 
 \begin{itemize}
 \tightlist
