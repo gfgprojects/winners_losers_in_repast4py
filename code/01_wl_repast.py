@@ -9,8 +9,8 @@ import random as pyrandom
 verboseFlag=True
 #verboseFlag=False
 #agents_counter=0
-
 numberOfAgentsInEachRank = 5
+stopAt=4
 
 class WLagent(core.Agent):
     TYPE = 0
@@ -20,13 +20,21 @@ class WLagent(core.Agent):
         self.money = money
         if verboseFlag: print("hello from WL agent "+str(self.id)+" I am in rank "+str(rank)+" my money holding is "+str(self.money))
         #global agents_counter
-        #walker_counter+=1
 #    def walk(self):
 #        self.pt+=repastrandom.default_rng.random()-0.5
 #        self.pt+=repastrandom.default_rng.normal()
 #        print("  walked: walker "+str(self.id)+" I am in rank "+str(self.rank)+" my new position is "+str(self.pt)+" uid "+str(self.uid))
+
     def save(self) -> Tuple:
-        return self.uid
+        return (self.uid,self.money)
+
+
+def restore_agent(agent_data: Tuple):
+    tupleFromSaveFunction=agent_data
+    uid=tupleFromSaveFunction[0]
+    money=tupleFromSaveFunction[1]
+    tmp = WLagent(uid[0],uid[2],money)
+    return tmp
 
 class Model:
 #    def __init__(self, comm: MPI.Intracomm, params: Dict):
@@ -40,7 +48,7 @@ class Model:
         self.runner = schedule.init_schedule_runner(comm)
         self.runner.schedule_event(0,self.createAgents)
         self.runner.schedule_repeating_event(1, 1, self.step)
-        self.runner.schedule_stop(4)
+        self.runner.schedule_stop(stopAt)
 #        self.runner.schedule_end_event(self.at_end)
         # create the context to hold the agents and manage cross process
         # synchronization
@@ -97,13 +105,14 @@ class Model:
     def step(self):
         tick=self.runner.tick()
         activeRank=tick % self.size
-        activeRank=0
+        #activeRank=0
         counterpartRank=repastrandom.default_rng.choice(self.allRanks)
         #next variable will allow point-to-point communication below in the code
         chosenFromOtherRanks=False
         interactionBetweenRanks=False
 #        print('-- tick '+str(tick)+' active r '+str(activeRank)+' self r '+str(self.rank)+' receiving rank '+str(counterpartRank))
         ##active rank choose his agent and another agent to interact with
+        agentsToBeRequested=[]
         if self.rank == activeRank:
             if verboseFlag: print('updating rank '+str(self.rank)+' at tick '+str(tick)+' active rank '+str(activeRank))
             localAgentID=repastrandom.default_rng.integers(numberOfAgentsInEachRank,size=1)[0]
@@ -132,47 +141,43 @@ class Model:
                 interactionBetweenRanks=True
                 if verboseFlag: print('local agent '+str(aWL.uid)+' interact with '+str(counterpartTuple))
             #add the sender rank id to allow point to point communication below
-            tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
-            #because destination rank is random, we have to send to all ranks except the active one.
-            for aRank in self.otherRanks:
-                self.comm.send(tupleToSend,aRank)
-
-        ##All the remote ranks receive info from active rank. The selected rank get the agent, watch his money and send the information to the active rank
-        else:
-            #print('tick '+str(tick)+' active r '+str(activeRank)+' self r '+str(self.rank)+' receiving rank '+str(counterpartRank))
-            data=self.comm.recv(source=activeRank)
-            if verboseFlag: print('tick '+str(tick)+' active r '+str(activeRank)+' self r '+str(self.rank)+' received data '+str(data))
-            agTuple=data[0]
-            interactionBetweenRanks=data[2]
-            if agTuple[2]==self.rank:
-                chosenFromOtherRanks=True
-                talkingWith=data[1]
-                if verboseFlag: print('this agent is in my rank, talking with rank ',talkingWith)
-                tmpWL=self.context.agent(agTuple)
-                self.comm.send(tmpWL.money,talkingWith)
-                if verboseFlag: print('information sent to rank ',str(talkingWith),' money ',tmpWL.money)
-        ##Active rank receive info on money from the remote rank
-        if self.rank == activeRank and interactionBetweenRanks:
-            recWallet=self.comm.recv(source=counterpartRank)
-            if verboseFlag: print('information received from rank ',counterpartRank,': money = ',recWallet)
-            moneySum=aWL.money+recWallet
-            if verboseFlag: print('sum of meoney holdings ',moneySum)
+                agentsToBeRequested.append((counterpartTuple,counterpartRank))
+        self.context.request_agents(agentsToBeRequested,restore_agent)
+        if len(self.context._agent_manager._ghosted_agents)>0:
+            chosenFromOtherRanks=True
+            ghosted_keys=list(self.context._agent_manager._ghosted_agents.keys())
+            ghostedAgent=self.context._agent_manager._ghosted_agents[ghosted_keys[0]]
+            talkingWith=list(ghostedAgent.ghost_ranks.keys())[0]
+        #if active rank interacts with another rank
+        if self.rank == activeRank and self.rank != counterpartRank:
+            #get the ghost of the agent
+            otherAgent=self.context.ghost_agent(counterpartTuple)     
+            moneySum=aWL.money+otherAgent.money
+            if verboseFlag: print('sum of money holdings ',moneySum)
             share=repastrandom.default_rng.random()
             if verboseFlag: print('share ',share)
             localAgentMoney=moneySum*share
-            remoteAgentMoney=moneySum-localAgentMoney
-            if verboseFlag: print('money to local agent ',localAgentMoney,' money to remote agent ',remoteAgentMoney)
+            secondAgentMoney=moneySum-localAgentMoney
+            if verboseFlag: print('money to local agent ',localAgentMoney,' money to agent in other rank ',secondAgentMoney)
             aWL.money=localAgentMoney
-            if verboseFlag: print("local agent's money updated")
-            self.comm.send(remoteAgentMoney,counterpartRank)
-            if verboseFlag: print("remote agent's money info sent to rank ", counterpartRank)
-        ##Remote rank receive information from active rank and update his agents's money
-        else:
-            if chosenFromOtherRanks and interactionBetweenRanks:
-                newMoney=self.comm.recv(source=talkingWith)
-                if verboseFlag: print('Information received from rank ',talkingWith,' money ',newMoney)
-                tmpWL.money=newMoney
-                if verboseFlag: print('agent ',str(agTuple),' money updated')
+            #send info to the rank
+            self.comm.send(((counterpartTuple),secondAgentMoney),counterpartRank) 
+            if verboseFlag: print('rank',str(self.rank),'info sent to rank',str(counterpartRank))
+
+        if chosenFromOtherRanks:
+            localIDandNewMoney=self.comm.recv(source=talkingWith)
+            if verboseFlag: print('information received from rank ',str(talkingWith),': ',localIDandNewMoney)
+            localID=localIDandNewMoney[0]
+            newMoney=localIDandNewMoney[1]
+            self.context.agent(localID).money=newMoney
+            if verboseFlag: print('agent ',localID,' money updated')
+            #delete ghosted
+            self.context._agent_manager.delete_ghosted(localID)
+        #delete ghost
+        if self.rank == activeRank and self.rank != counterpartRank:
+            self.context._agent_manager.delete_ghost(otherAgent.uid)
+        #print(self.context._agent_manager._req_ghosts)
+
 
     def start(self):
         if verboseFlag: print("hello, I am going to run the start function")

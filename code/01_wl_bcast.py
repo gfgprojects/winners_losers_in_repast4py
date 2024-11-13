@@ -9,6 +9,7 @@ import random as pyrandom
 verboseFlag=True
 #verboseFlag=False
 #agents_counter=0
+numberOfAgentsInEachRank = 5
 
 class WLagent(core.Agent):
     TYPE = 0
@@ -16,7 +17,7 @@ class WLagent(core.Agent):
         super().__init__(id=local_id, type=WLagent.TYPE, rank=rank)
         self.rank=rank
         self.money = money
-        if verboseFlag: print("hello from walker "+str(self.id)+" I am in rank "+str(rank)+" my position is "+str(self.money))
+        if verboseFlag: print("hello from WL agent "+str(self.id)+" I am in rank "+str(rank)+" my money holding is "+str(self.money))
         #global agents_counter
         #walker_counter+=1
 #    def walk(self):
@@ -25,13 +26,6 @@ class WLagent(core.Agent):
 #        print("  walked: walker "+str(self.id)+" I am in rank "+str(self.rank)+" my new position is "+str(self.pt)+" uid "+str(self.uid))
     def save(self) -> Tuple:
         return self.uid
-
-#agent_cache = {}
-
-def restore_agent(agent_data: Tuple):
-    uid=agent_data
-    tmp = Walker(uid[0],uid[2],0.0)
-    return tmp
 
 class Model:
 #    def __init__(self, comm: MPI.Intracomm, params: Dict):
@@ -93,7 +87,7 @@ class Model:
         if verboseFlag: print('====== start create agents ======')
         rank=self.rank
         #create a WLagents
-        for i in range(5):
+        for i in range(numberOfAgentsInEachRank):
             awl=WLagent(i,rank,1)
             #add the walker to the context
             self.context.add(awl)
@@ -111,13 +105,13 @@ class Model:
         ##active rank choose his agent and another agent to interact with
         if self.rank == activeRank:
             if verboseFlag: print('updating rank '+str(self.rank)+' at tick '+str(tick)+' active rank '+str(activeRank))
-            localAgentID=repastrandom.default_rng.integers(5,size=1)[0]
+            localAgentID=repastrandom.default_rng.integers(numberOfAgentsInEachRank,size=1)[0]
             aWL=self.context.agent((localAgentID,0,self.rank))
-            counterpartID=repastrandom.default_rng.integers(5,size=1)[0]
+            counterpartID=repastrandom.default_rng.integers(numberOfAgentsInEachRank,size=1)[0]
             counterpartTuple=(counterpartID,0,counterpartRank)
             if self.rank == counterpartRank:
                 if localAgentID == counterpartID:
-                    otherAgentsIDs=list(range(5))
+                    otherAgentsIDs=list(range(numberOfAgentsInEachRank))
                     otherAgentsIDs.pop(localAgentID)
                     counterpartID=repastrandom.default_rng.choice(otherAgentsIDs)
                     counterpartTuple=(counterpartID,0,counterpartRank)
