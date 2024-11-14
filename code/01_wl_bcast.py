@@ -24,8 +24,6 @@ class WLagent(core.Agent):
 #        self.pt+=repastrandom.default_rng.random()-0.5
 #        self.pt+=repastrandom.default_rng.normal()
 #        print("  walked: walker "+str(self.id)+" I am in rank "+str(self.rank)+" my new position is "+str(self.pt)+" uid "+str(self.uid))
-    def save(self) -> Tuple:
-        return self.uid
 
 class Model:
 #    def __init__(self, comm: MPI.Intracomm, params: Dict):

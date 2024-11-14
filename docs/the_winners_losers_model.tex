@@ -8,13 +8,7 @@
   \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 \begin{document}
 \section{Winners-losers models}
-In the Winners-Losers model, agents have only one variable: their money holding. At each iteration
-\begin{itemize}
-		\tightlist
-	\item two agents meet
-	\item pool their money holdings
-	\item share the sum randomly.  
-\end{itemize}
+In the Winners-Losers model, agents have only one variable: their money holding. Their holdings are modified as follows. At each iteration two agents meet, pool their money holdings, and share the sum randomly.  
 Therefore, after an interaction both the agents have their money holdings changed.
 
 The algorithm of the Winners-Losers model is as follows:
@@ -49,7 +43,7 @@ The algorithm of the Winners-Losers model is as follows:
 
 \vskip4mm
 This dynamics is very simple, but we can have some extreme cases. For
-example, an agent can be never chosen.
+example, an agent can never be chosen.
 
 If we want to avoid these cases, we can modify our main loop as follows
 
@@ -121,9 +115,11 @@ In a more complicate variant, a choosing agent can observe a number of other age
 
 \vskip4mm
 
-Model 1 is so simple that its straightforward implementation does not require an agent-based approach (see Section \ref{sec:model1withoutagents})
+Model 1 is so simple that its straightforward implementation does not require an agent-based approach (see Section \ref{sec:model1withoutagents}).
 
-Because we are interested in agent-based models, we will proceed with the agent-based implementation as a tutorial towards more advanced models.  
+Because we are interested in agent-based models, we will proceed with the agent-based implementation as a tutorial towards more realistic and advanced models.  
+
+In particular, the final goal of this document is to start dealing with parallel implementations of the models. 
 
 Among the many available platforms we will use Repast (\url{https://repast.github.io}).
 
@@ -147,9 +143,9 @@ All the mentioned Repast toolkits provide facilities to implement agent-based mo
 	\item \ldots
 \end{itemize}
 
-We plan to use ``Repast for Python'' that is the most up-to-date toolkit in the Repast family. In addition to the previous mentioned facilities, it builds some of its functions on mpi4py to ease the management of parallel computation.
+We plan to use ``Repast for Python'', the most up-to-date toolkit in the Repast family. In addition to the previous mentioned facilities, Repast4py builds some of its functions on mpi4py to ease the management of parallel computation.
 
-In the following section we will deal with the following implementations of winners-losers model 1:
+In the following section we will deal with four implementations of winners-losers model 1:
 \begin{itemize}
 	\item WL model without agents coded in python (without Repast functions)
 	\item WL model with agents in a no parallel setting (Using Repast facilities excluded those for parallel computation)
@@ -171,7 +167,7 @@ code in \verb+01_wl_not_parallel_with_agents.py+.
 
 command to run: \verb+python 01_wl_not_parallel_with_agents.py+.
 
-\section{Model 1 parallel without ghosts}
+\section{Model 1 parallel with MPI functions}
 
 
 
@@ -181,7 +177,7 @@ to be performed on different processes (or ranks). Although this is not
 a true parallelization, it will serve to understand communication among
 ranks.
 
-Algorithm
+The algorithm we will implement is the following:
 
 \begin{itemize}
 \tightlist
@@ -271,8 +267,9 @@ information sent to rank 2 money 0.135
                                            sum of money holdings  1.135
                                            share  0.86
                                            money to local agent  0.976
-                                                    money to remote agent  0.158
+                                           money to remote agent  0.158
                                            local agent's money updated
+                                           information send to rank 1 money 0.158
 Information received from rank 2 money 0.158
 agent  (2, 0, 1)  money updated
 --------------------------------------------------------------------------------------
@@ -290,13 +287,13 @@ tick 2 active r 2 self r 0                 tick 2 active r 2 self r 3
 \normalsize
 
 It is interesting to note that agent 2 in rank 1 is involved in both time tick.
-In the first time tick, it randomly chooses agent 0 in the same rank.
+In the first time tick, it is randomly chooses as the acting agent. It chooses agent 0 in the same rank to interact with.
 In time tick 2 it is selected by agent 3 in rank 2 as a partner for interaction. Therefore rank 1 send information on agent's 2 money holding to rank 2.
 Rank 2 performs the computation and send back information on rank 1's agent's money holdings. Finally, rank 1 updates the agent's state.
 
-We highlight here the most relevant lines of code that are contained in the step function.  
+We highlight here the most relevant lines of code. They are contained in the step function.  
 
-In case the chosen agent is in another rank, the first interaction cannot be of the point-to-point type. In fact in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While in our inplementation the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore in the first communication, the sending rank has to inform all the other rank of its decisions. To achieve this goal, the sending rank prepare a tuple 
+In case the agent with which to interact is in another rank, the first communication cannot be of the point-to-point type. In fact, in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore, in the first communication, the sending rank has to inform all the other rank of its decisions. To achieve this goal, the sending rank prepare a tuple 
 \begin{verbatim}
 tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
 \end{verbatim}
@@ -305,7 +302,7 @@ and send it to all the other ranks
 for aRank in self.otherRanks:
    self.comm.send(tupleToSend,aRank)
 \end{verbatim}
-all the other ranks receive the sent tuple. They now know which is the requested agent, the sender rank, and the interaction is between ranks.
+all the other ranks receive the sent tuple. They now know which is the requested agent, the sender rank, and that the interaction is between ranks.
 Analyzing the requested agent tuple, each rank can establish if it is involved. The code is as follows:
 \begin{verbatim}
 data=self.comm.recv(source=activeRank)  #receive data
@@ -315,7 +312,7 @@ if agTuple[2]==self.rank:               #establish if the rank is involved
     chosenFromOtherRanks=True           #set the involved variable
     talkingWith=data[1]                 #set the rank from which massages will be received
 \end{verbatim}
-Note that the last line of code wil allow point-to-point communication thereinafter.
+Note that the last line of code will allow point-to-point communication hereinafter.
 
 Next to this, in fact, the rank called to interact gets the selected agent, and send the information directly to the active rank with the following code:
 \begin{verbatim}
@@ -323,44 +320,44 @@ tmpWL=self.context.agent(agTuple)
 self.comm.send(tmpWL.money,talkingWith)
 \end{verbatim}             
 
-The active rank receive imformation:
+The active rank receives information:
 \begin{verbatim}
 recWallet=self.comm.recv(source=counterpartRank)
 \end{verbatim}
-perform the pooling and the reallocation and send back info to the selected rank
+performs the pooling and the reallocation and send back info to the selected rank
 \begin{verbatim}
 self.comm.send(remoteAgentMoney,counterpartRank)
 \end{verbatim}
-Finally, the selected rank receive information and update its agents money honding:
+Finally, the selected rank receives information, and update its agents money holding:
 \begin{verbatim}
 newMoney=self.comm.recv(source=talkingWith)
 tmpWL.money=newMoney
 \end{verbatim}
 
-The first part of the code described above can be implemented in an alternative way that allows the use of another interesting MPI function.
+The first part of the code described above can be implemented in an alternative way that uses another interesting MPI function.
 We are referring in particular to the part in which the active rank informs all the other ranks. Above we implemented this part as follows:
 \begin{verbatim}
 for aRank in self.otherRanks:
    self.comm.send(tupleToSend,aRank)
 \end{verbatim}
 however, we can avoid the for loop using the MPI broadcast function.
-To make it works, the active rank define the \verb+tupleToSend+ as before. All the other rank as to define the same variable, setting it to \verb+None+.
+To make it works, the active rank defines the \verb+tupleToSend+ as before. All the other rank define the same variable, setting it to \verb+None+.
 Finally, all the rank call the \verb+bcast+ function as follows:
 \begin{verbatim}
 data=self.comm.bcast(tupleToSend,root=activeRank)
 \end{verbatim}
-afteward, the code proceed as before.
+afterward, the code proceed as before.
 
 The version of the code using the \verb+bcast+ function in provided in the \verb+01_wl_bcast.py+ script.
 
-It can be run with the following command:
+In case of running on 4 ranks, the command is:
 \begin{verbatim}
 mpirun -n 4 python 01_wl_bcast.py
 \end{verbatim}
 
 \section{Model 1 parallel with ghosts}
 
-We will describe hereafter how to parallelize the model using Repast4py.
+We will describe hereafter how to parallelize the model using Repast4py in full.
 
 Till now, in case of interaction between two agents in two different ranks, the ranks send and receive information to allow their agents to update their states.
 
@@ -391,6 +388,58 @@ Repast allows each rank to collect information from requested agent. In particul
 Therefore, the user has to endow the agent with the save function. This function could not be implemented by the Repast team because it is model specific (agents are different among models, and the tuple returned by \verb+save+ can be shaped only by the modeler).
 
 The second code integration consist in providing a function accessible at rank level whose role is to create new agents given a tuple with the same structure of \verb+save+ return. This function is the second input argument of \verb+request_agent+. The function can be named at the modeler convenience, however, the repast convention is to call it \verb+restore_agent(....)+   
+
+We report even in this case some significant lines of code.
+
+The agent's function save:
+
+\begin{verbatim}
+    def save(self) -> Tuple:
+        return (self.uid,self.money)
+\end{verbatim}
+
+and the \verb+restore_agent+ function:
+
+\begin{verbatim}
+def restore_agent(agent_data: Tuple):
+    tupleFromSaveFunction=agent_data
+    uid=tupleFromSaveFunction[0]
+    money=tupleFromSaveFunction[1]
+    tmp = WLagent(uid[0],uid[2],money)
+    return tmp
+\end{verbatim}
+
+
+In the step function, each rank fills a list of tuples we called \verb+agentsToBeRequested+.
+In our model only the active rank has an item in the list. The other ranks have empty lists.
+
+\begin{verbatim}
+        agentsToBeRequested=[]
+        if self.rank == activeRank:
+            .. .. ..
+            .. .. ..
+            if self.rank == counterpartRank:
+            .. .. ..
+            .. .. ..
+            else:
+                interactionBetweenRanks=True
+                agentsToBeRequested.append((counterpartTuple,counterpartRank))
+        self.context.request_agents(agentsToBeRequested,restore_agent)
+\end{verbatim}
+The list is then used in the \verb+request_agents+ as the first argument. The second argument being the \verb+restore_agent+ function.
+
+The \verb+request_agents+ function populates two lists. The ghosts list and the ghosted list i.e. the list of local agents having ghosts. 
+In our model, in case of between rank interaction, the active rank has one element in the ghost list, while the other rank has one element in the ghosted list.
+In the following code, a rank learn it will be involved in the interaction checking the ghosted agents list. Because the ghosted list also record the rank where agents are ghosted, the rank also learn the rank with which it will interact. This will allows point-to-point interaction.
+
+\begin{verbatim}
+        if len(self.context._agent_manager._ghosted_agents)>0:
+            chosenFromOtherRanks=True
+            ghosted_keys=list(self.context._agent_manager._ghosted_agents.keys())
+            ghostedAgent=self.context._agent_manager._ghosted_agents[ghosted_keys[0]]
+            talkingWith=list(ghostedAgent.ghost_ranks.keys())[0]
+\end{verbatim}
+ 
 
 
 \section{Model 2 parallel implementation with ghosts}
