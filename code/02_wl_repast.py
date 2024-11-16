@@ -7,13 +7,15 @@ from typing import Tuple
 import random as pyrandom
 
 verboseFlag=True
-#verboseFlag=False
+verboseFlag=False
 #agents_counter=0
 numberOfAgentsInEachRank = 5
 stopAt=4
 allRanks=0
 agentsToBeRequested=[]
 messagesAfterInteraction=[]
+
+context = None
 
 class WLagent(core.Agent):
     TYPE = 0
@@ -31,19 +33,47 @@ class WLagent(core.Agent):
     def set_counterpart(self):
         counterpartRank=repastrandom.default_rng.choice(allRanks)
         counterpartID=repastrandom.default_rng.integers(numberOfAgentsInEachRank,size=1)[0]
-#        counterpartTuple=(counterpartID,0,counterpartRank)
-        self.counterpartTuple=(1,0,counterpartRank)
-        print('agent',self.uid,'requests',self.counterpartTuple)
+        self.counterpartTuple=(counterpartID,0,counterpartRank)
+        if verboseFlag: print('agent',self.uid,'requests',self.counterpartTuple)
         if self.uid[2]!=counterpartRank:
             #does not ask for an agent already requested
             if (self.counterpartTuple,counterpartRank) in agentsToBeRequested:
-                print('sorry this agent was already in the LIST')
-                counterpartTuple=None
+                if verboseFlag: print('sorry this agent was already in the LIST')
+                self.counterpartTuple=(self.counterpartTuple[0],self.counterpartTuple[1],-1)
             else:
                 agentsToBeRequested.append((self.counterpartTuple,counterpartRank))
     def interact(self):
         if self.counterpartTuple[2]==self.uid[2]:
-            print('local interaction')
+            if verboseFlag: print(self.uid,'performing local exchange with',self.counterpartTuple)
+            theCounterpart=context.agent(self.counterpartTuple)
+            moneySum=self.money+theCounterpart.money
+            if verboseFlag: print('sum of money holdings ',moneySum)
+            share=repastrandom.default_rng.random()
+            if verboseFlag: print('share ',share)
+            localAgentMoney=moneySum*share
+            theCounterpartMoney=moneySum-localAgentMoney
+            if verboseFlag: print('money to local agent ',localAgentMoney,' money to second local agent ',theCounterpartMoney)
+            self.money=localAgentMoney
+            theCounterpart.money=theCounterpartMoney
+            if verboseFlag: print("Local agents' money holdings updated")
+        else:
+            theCounterpart=context.ghost_agent(self.counterpartTuple)
+            if theCounterpart is not None:
+                if verboseFlag: print(self.uid,'performing non-local exchange with',theCounterpart)
+                moneySum=self.money+theCounterpart.money
+                if verboseFlag: print('sum of money holdings ',moneySum)
+                share=repastrandom.default_rng.random()
+                if verboseFlag: print('share ',share)
+                localAgentMoney=moneySum*share
+                theCounterpartMoney=moneySum-localAgentMoney
+                if verboseFlag: print('money to local agent ',localAgentMoney,' money to ghost agent ',theCounterpartMoney)
+                self.money=localAgentMoney
+                if verboseFlag: print("Local agent's money holding updated")
+                messagesAfterInteraction.append(((self.counterpartTuple),theCounterpartMoney))
+                if verboseFlag: print('info for rank',self.counterpartTuple[2],'added to messagesAfterInteraction')
+            else:
+                if verboseFlag: print(self.uid,'not performing non-local exchange with',theCounterpart)
+
     def save(self) -> Tuple:
         return (self.uid,self.money)
 
@@ -71,7 +101,8 @@ class Model:
 #        self.runner.schedule_end_event(self.at_end)
         # create the context to hold the agents and manage cross process
         # synchronization
-        self.context = ctx.SharedContext(comm)
+        global context
+        context = ctx.SharedContext(comm)
         #create random seed for processes
         #by setting this seed random numbers will be the same in different runs
         #comment the following line if you want different results in different runs
@@ -103,7 +134,7 @@ class Model:
         for i in range(numberOfAgentsInEachRank):
             awl=WLagent(i,rank,1)
             #add the walker to the context
-            self.context.add(awl)
+            context.add(awl)
         if verboseFlag: print('====== end create agents ======')
 
     def step(self):
@@ -121,20 +152,28 @@ class Model:
         if self.rank == activeRank:
             if verboseFlag: print('updating rank '+str(self.rank)+' at tick '+str(tick)+' active rank '+str(activeRank))
             localAgentID=repastrandom.default_rng.integers(numberOfAgentsInEachRank,size=1)[0]
-            aWL=self.context.agent((localAgentID,0,self.rank))
-            for aWL in self.context.agents():
+            aWL=context.agent((localAgentID,0,self.rank))
+            for aWL in context.agents():
                 aWL.set_counterpart()
-            print(agentsToBeRequested)
-        self.context.request_agents(agentsToBeRequested,restore_agent)
-        print('rank',str(self.rank))
-        print('ghosts',self.context._agent_manager._ghost_agents)
-        print('ghosted',self.context._agent_manager._ghosted_agents)
-        #if fully parallel leaves only a ghost
+            if verboseFlag: print(agentsToBeRequested)
+        context.request_agents(agentsToBeRequested,restore_agent)
+        if verboseFlag: print('rank',str(self.rank))
+        if verboseFlag: print('ghosts',context._agent_manager._ghost_agents)
+        if verboseFlag: print('ghosted',context._agent_manager._ghosted_agents)
+        #if fully parallel insert code to leave only a ghost
         global messagesAfterInteraction
         messagesAfterInteraction=[]
         if self.rank == activeRank:
-            for aWL in self.context.agents():
+            for aWL in context.agents():
                 aWL.interact()
+        data=self.comm.bcast(messagesAfterInteraction,root=activeRank)
+        if self.rank != activeRank:
+            for aTuple in data:
+                if aTuple[0][2]==self.rank:
+                    context.agent(aTuple[0]).money=aTuple[1]
+                    if verboseFlag: print(aTuple[0],'money updated')
+        context._agent_manager._ghost_agents.clear()
+        context._agent_manager._ghosted_agents.clear()
         
 
 
