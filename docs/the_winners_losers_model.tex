@@ -140,10 +140,13 @@ All the mentioned Repast toolkits provide facilities to implement agent-based mo
 	\item a scheduler to controls the dynamic of the simulation
 	\item spatial structures such as grids or continuous 2d space to locate agents
 	\item network structures
+	\item facilities to handle parameters
+	\item facilities to record results
 	\item \ldots
 \end{itemize}
 
 We plan to use ``Repast for Python'', the most up-to-date toolkit in the Repast family. In addition to the previous mentioned facilities, Repast4py builds some of its functions on mpi4py to ease the management of parallel computation.
+However, in some cases we have to use the mpi4py functions directly to achieve our goals. 
 
 In the following section we will deal with four implementations of winners-losers model 1:
 \begin{itemize}
@@ -161,11 +164,14 @@ It suffice to create an array of money holdings, take two of them at each iterat
 The \verb+01_wl_no_agents.py+ script in the code folder (based on Pietro Terna's code from
 \url{https://github.com/terna/winners-losers/blob/main/par2.1Chakraborti.ipynb}) provides such implementation.
 
+Type \verb+python 01_wl_no_agents.py+ in a prompt terminal to run the script.
+
+
 \section{Model 1 not parallel with agents}
 
 code in \verb+01_wl_not_parallel_with_agents.py+.
 
-command to run: \verb+python 01_wl_not_parallel_with_agents.py+.
+\noindent command to run: \verb+python 01_wl_not_parallel_with_agents.py+.
 
 \section{Model 1 parallel with MPI functions}
 
@@ -199,7 +205,7 @@ The algorithm we will implement is the following:
     \begin{itemize}
 		    \tightlist
     \item
-	    check that ARb and ARa are different, if not change the second agent with a different one
+	    check that ARb and ARa are different, if not, change the second agent with a different one
     \item
       pool the two agents' money holdings and reallocate the sum randomly
     \end{itemize}
@@ -293,7 +299,7 @@ Rank 2 performs the computation and send back information on rank 1's agent's mo
 
 We highlight here the most relevant lines of code. They are contained in the step function.  
 
-In case the agent with which to interact is in another rank, the first communication cannot be of the point-to-point type. In fact, in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore, in the first communication, the sending rank has to inform all the other rank of its decisions. To achieve this goal, the sending rank prepare a tuple 
+In case the agent with which to interact is in another rank, the first communication cannot be of the point-to-point type. In fact, in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore, in the first communication, the sending rank has to inform all the other rank of its decisions. To achieve this goal, in our implementation, the sending rank prepare a tuple 
 \begin{verbatim}
 tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
 \end{verbatim}
@@ -302,7 +308,7 @@ and send it to all the other ranks
 for aRank in self.otherRanks:
    self.comm.send(tupleToSend,aRank)
 \end{verbatim}
-all the other ranks receive the sent tuple. They now know which is the requested agent, the sender rank, and that the interaction is between ranks.
+all the other ranks receive the sent tuple. They now know who is the requested agent, the sender rank, and that the interaction is between ranks.
 Analyzing the requested agent tuple, each rank can establish if it is involved. The code is as follows:
 \begin{verbatim}
 data=self.comm.recv(source=activeRank)  #receive data
@@ -439,11 +445,112 @@ In the following code, a rank learn it will be involved in the interaction check
             ghostedAgent=self.context._agent_manager._ghosted_agents[ghosted_keys[0]]
             talkingWith=list(ghostedAgent.ghost_ranks.keys())[0]
 \end{verbatim}
- 
 
+The active rank takes the agent from the ghost list, gets the money level of the ghost, and decides the new allocation:
+\begin{verbatim}
+otherAgent=self.context.ghost_agent(counterpartTuple)     
+moneySum=aWL.money+otherAgent.money
+.. .. ..
+.. .. ..
+\end{verbatim}
+The two agents' money holdings are updated with MPI functions as in the previous case. We cannot use Repast functions because it does not provide function that updates the agents using the ghost status.
+
+Finally, in this version we have to clear both the ghost and the ghosted list
+\begin{verbatim}
+        if chosenFromOtherRanks:
+            .. .. ..
+            .. .. ..
+            #delete ghosted
+            self.context._agent_manager.delete_ghosted(localID)
+        #delete ghost
+        if self.rank == activeRank and self.rank != counterpartRank:
+            self.context._agent_manager.delete_ghost(otherAgent.uid)
+\end{verbatim}
 
 \section{Model 2 parallel implementation with ghosts}
-A parallel implementation of model 2 with Repast4py ghosts can be as follows:
+Model 2 is characterized by the fact that multiple agents perform interaction at each time step.
+We will give first an implementation in which agents in a single rank perform the interaction at each time step. Finally, we provide the full parallel implementation where the agents in all ranks perform the interaction at each time step.
+\subsection{One rank at a time}
+The algorithm can be as follow:
+
+\begin{itemize}
+\tightlist
+\item
+  Store information on how many ranks there are and how many agents are
+  in each rank
+\item
+	at each time step, take a rank
+
+  \begin{itemize}
+  \tightlist
+  \item
+    create RL1 (an empty list where to store references to agents to be requested to
+    other ranks)
+  \item
+    create RL2 (an empty list where to store info to update original agents in other ranks after local agents interact with ghosts)
+  \item
+    each agent
+
+    \begin{itemize}
+    \tightlist
+    \item
+	    randomly draw a rank (the counterpartRank)
+    \item
+      randomly draw an agent id belonging to the rank chosen in the
+      previous step
+    \item
+      if counterpartRank is different from current rank add id to RL1, but only if
+      the id is not yet in RL1 (this avoid to request two time the same agent). 
+    \end{itemize}
+  \item
+    current rank request RL1. As a result current rank create ghosts and
+    other ranks accounts for ghosted
+  \item
+	  each agent: perform interaction
+	  \begin{itemize}
+		  \item if counterpartRank is equal to current rank: perform local interaction and update money holdings of the two local agents
+		  \item else:
+			  \begin{itemize}
+				  \item perform interaction with ghost. Update the local and the ghost money variable.
+%				  \item if countepart id is not None: perform interaction with ghost. Record new money of ghost in RL2
+%				  \item else: agent does not interact
+			  \end{itemize}
+	  \end{itemize}
+	\item perform a loop on the ghosts list to fill RL2 with ghost id and money holding
+	\item current rank broadcast RL2 
+	\item ranks different from current update original agents money holding using RL2
+	\item each rank clear ghost and ghosted lists
+
+  \end{itemize}
+\end{itemize}
+
+This model represents a significant change from the previous ones. In the models above, the interaction is managed by the rank, while in the present one the interaction is managed by the agent.  
+Therefore, each agent has to be able to access its rank variables such as the list of agents, the list of ghost, the list of messages to send to other ranks. 
+
+To this aim we put these three lines after the includes:
+\begin{verbatim}
+context = None
+agentsToBeRequested=[]
+messagesAfterInteraction=[]
+\end{verbatim}
+The context variable is then assigned when the Model is created:
+\begin{verbatim}
+        global context
+        context = ctx.SharedContext(comm)
+\end{verbatim}
+In this way, agents can directly add elements to the \verb+agentsToBeRequested+ list, get local agents or ghosts and add to \verb+messagesAfterInteraction+.
+
+The \verb+WLagent+ class now has two more functions: \verb+set_counterpart()+ and \verb+interact()+. 
+
+At each interaction, the acting agent updates its partner money holding either if it is a local agent or a ghost.
+
+Note that the original agents are updated at the end of all the interactions. The list of messages to be send is filled with information taken from the ghosts.
+
+This allows ghosts, like local agents, be involved in several interactions. In this version of the model all the agents of a rank has at least one interaction.
+
+
+\subsection{All ranks at a time}
+A full parallel implementation of model 2 with Repast4py ghosts can be as follows:
 
 \begin{itemize}
 \tightlist
@@ -456,41 +563,54 @@ A parallel implementation of model 2 with Repast4py ghosts can be as follows:
   \begin{itemize}
   \tightlist
   \item
-    create RL1 (an empty list where to store agents to be requested to
+    create RL1 (an empty list where to store references to agents to be requested to
     other ranks)
+  \item
+    create RL2 (an empty list where to store info to update original agents in other ranks after local agents interact with ghosts)
   \item
     each agent
 
     \begin{itemize}
     \tightlist
     \item
-      create AL1 (an empty list where to store ids of agents that will
-      be chosen in next 2 steps)
+	    randomly draw a rank (the counterpartRank)
     \item
-      randomly draw a rank (or n ranks)
-    \item
-      randomly draw an agent id belonging to each rank chosen in the
+      randomly draw an agent id belonging to the rank chosen in the
       previous step
     \item
-      add agents ids to AL1
-    \item
-      if rank is different from current rank add id to RL1, but only if
-      the id is not yet in RL1 (this is because we will explain below
-      that a ghosted agent can be involved at most in an exchange)
+      if counterpartRank is different from current rank add id to RL1, but only if
+      the id is not yet in RL1 (this avoid to request two time the same agent). 
     \end{itemize}
   \item
-    current rank request RL1. As a result current rank create ghosts and
-    other ranks accounts for ghosted
+    all ranks request RL1. As a result ranks create ghosts and ghosted lists
+  \item 
+	  all ranks analyze the ghosted list and identify ghosts to be removed. Each agent has to be ghosted at most in one rank
+  \item 
+	  all ranks remove ghost signaled by other ranks
+  \item
+	  each agent: perform interaction
+	  \begin{itemize}
+		  \item if counterpartRank is equal to current rank: perform local interaction and update money holdings of the two local agents
+		  \item else:
+			  \begin{itemize}
+				  \item if countepart id is not None: perform interaction with ghost. Record new money of ghost in RL2
+				  \item else: agent does not interact
+			  \end{itemize}
+	  \end{itemize}
+	\item perform a loop on the ghosts list to fill RL2 with ghost id and money holding
+	\item current rank broadcast RL2 
+	\item ranks different from current update original agents money holding using RL2
+	\item each rank clear ghost and ghosted lists
+
   \end{itemize}
 \end{itemize}
 
-Now we have to make sure that each ghost is involved in at most a
-transaction. The ghosted list can help in identifying if an agent is
+
+Now we have to make sure that each agent is ghosted to at most in one rank. The ghosted list can help in identifying if an agent is
 ghosted in more than a rank. We have to delete ghost in such a way that
 the agent has only one ghost.
 
-Now exchanges can be performed. Local exchanges can be accounted
-immediately exchanges with ghost are registered in a list
+Now exchanges can be performed. Money holdings are accounted
+immediately after each exchange both for local agents and ghosts.
 
-The rank send the list and the receiving rank update the agent holding
 \end{document}
