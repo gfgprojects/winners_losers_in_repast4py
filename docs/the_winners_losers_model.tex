@@ -644,6 +644,21 @@ Now the position of the array signals the source rank of the agents. Therefore, 
 
 In a sense, received data is a transpose of sent data.
 
+The following code fill the data structure each rank will send:
+\begin{verbatim}
+        global ghostsToBeRemoved
+        ghostsToBeRemoved=[[] for i in range(self.size)]
+        ghosted_keys=list(context._agent_manager._ghosted_agents.keys())
+        for aKey in ghosted_keys:
+            ghostedAgent=context._agent_manager._ghosted_agents[aKey]
+            talkingWith=list(ghostedAgent.ghost_ranks.keys())
+            if len(talkingWith)>1:
+                ghostRanksInExcess=talkingWith[1:len(talkingWith)]
+                for aRank in ghostRanksInExcess:
+                    ghostsToBeRemoved[aRank].append(aKey)
+\end{verbatim}
+
+The array of arrays is named \verb+ghostsToBeRemoved+. For each ghosted agent, the dictionary \verb+ghost_ranks+ list the rank where the agent is ghosted. If this dictionary has more than one element, we select the element at position higher than zero as the rank where the ghosts of this agents will be deleted.
 
 
 Once we ensure the ghosts uniqueness, exchanges can be performed as in the previous model: money holdings are accounted
