@@ -501,6 +501,7 @@ The algorithm can be as follow:
     \item
       if counterpartRank is different from current rank add id to RL1, but only if
       the id is not yet in RL1 (this avoid to request two time the same agent). 
+    \item else: avoid self interactions
     \end{itemize}
   \item
     current rank request RL1. As a result current rank create ghosts and
@@ -509,14 +510,9 @@ The algorithm can be as follow:
 	  each agent: perform interaction
 	  \begin{itemize}
 		  \item if counterpartRank is equal to current rank: perform local interaction and update money holdings of the two local agents
-		  \item else:
-			  \begin{itemize}
-				  \item perform interaction with ghost. Update the local and the ghost money variable.
-%				  \item if countepart id is not None: perform interaction with ghost. Record new money of ghost in RL2
-%				  \item else: agent does not interact
-			  \end{itemize}
+		  \item else: perform interaction with ghost. Update the local and the ghost money variable.
 	  \end{itemize}
-	\item perform a loop on the ghosts list to fill RL2 with ghost id and money holding
+	\item current rank perform a loop on the ghosts list to fill RL2 with ghost id and money holding
 	\item current rank broadcast RL2 
 	\item ranks different from current update original agents money holding using RL2
 	\item each rank clear ghost and ghosted lists
@@ -542,16 +538,16 @@ In this way, agents can directly add elements to the \verb+agentsToBeRequested+ 
 
 The \verb+WLagent+ class now has two more functions: \verb+set_counterpart()+ and \verb+interact()+. 
 
-At each interaction, the acting agent updates its partner money holding either if it is a local agent or a ghost.
+At each interaction, the acting agent updates both its money holding and its counterpart's money holding either if it is a local agent or a ghost.
 
 Note that the original agents are updated at the end of all the interactions. The list of messages to be send is filled with information taken from the ghosts.
 
-This allows ghosts, like local agents, be involved in several interactions. In this version of the model all the agents of a rank has at least one interaction.
+This allows ghosts, like local agents, be involved in several interactions. In this version of the model all the agents of the current rank has at least one interaction.
 
 
 \subsection{All ranks at a time}
-A full parallel implementation of model 2 with Repast4py ghosts can be as follows:
-
+This is a full parallel implementation of model 2 with Repast4py ghosts.
+A possible algorithm unfolds as follows:
 \begin{itemize}
 \tightlist
 \item
@@ -563,10 +559,11 @@ A full parallel implementation of model 2 with Repast4py ghosts can be as follow
   \begin{itemize}
   \tightlist
   \item
-    create RL1 (an empty list where to store references to agents to be requested to
-    other ranks)
+    create RL1 (an empty list where to store references to agents to be requested to other ranks)
   \item
     create RL2 (an empty list where to store info to update original agents in other ranks after local agents interact with ghosts)
+  \item
+    create RL3 (an empty list where to store references to ghosts to be removed from other ranks)
   \item
     each agent
 
@@ -575,42 +572,81 @@ A full parallel implementation of model 2 with Repast4py ghosts can be as follow
     \item
 	    randomly draw a rank (the counterpartRank)
     \item
-      randomly draw an agent id belonging to the rank chosen in the
-      previous step
-    \item
-      if counterpartRank is different from current rank add id to RL1, but only if
-      the id is not yet in RL1 (this avoid to request two time the same agent). 
+      if counterpartRank is equal to current rank choose a local agent avoiding self interactions
+    \item else
+       \begin{itemize}
+	    \item
+	      randomly draw an agent id belonging to the rank chosen in the
+	      previous step
+	    \item
+	      add the agent's id to RL1, but only if the id is not yet in RL1 (this avoid to request two time the same agent). 
+       \end{itemize}
     \end{itemize}
   \item
     all ranks request RL1. As a result ranks create ghosts and ghosted lists
   \item 
-	  all ranks analyze the ghosted list and identify ghosts to be removed. Each agent has to be ghosted at most in one rank
+	  all ranks analyze the ghosted list and identify ghosts to be removed (this is because each agent has to be ghosted at most in one rank). The IDs of the ghost to be removed are recorded in the RL3 list
   \item 
-	  all ranks remove ghost signaled by other ranks
+	  all ranks receive RL3 and remove ghosts using information therein
   \item
 	  each agent: perform interaction
 	  \begin{itemize}
 		  \item if counterpartRank is equal to current rank: perform local interaction and update money holdings of the two local agents
 		  \item else:
 			  \begin{itemize}
-				  \item if countepart id is not None: perform interaction with ghost. Record new money of ghost in RL2
+				  \item if counterpart id is not None: perform interaction with ghost. Update the local and the
+					  ghost money variable
 				  \item else: agent does not interact
 			  \end{itemize}
 	  \end{itemize}
 	\item perform a loop on the ghosts list to fill RL2 with ghost id and money holding
-	\item current rank broadcast RL2 
-	\item ranks different from current update original agents money holding using RL2
+	\item all ranks broadcast RL2 (alltoall()) 
+	\item all ranks update original agents money holding using RL2
 	\item each rank clear ghost and ghosted lists
-
   \end{itemize}
 \end{itemize}
 
+In the model of the previous section, the following if conditions
+\begin{verbatim}
+        tick=self.runner.tick()
+        activeRank=tick % self.size
+        .. .. ..
+        if self.rank == activeRank:
+\end{verbatim}
+makes a rank updating at a time. We remove all the if statement to achieve the present full parallel implementation.
 
-Now we have to make sure that each agent is ghosted to at most in one rank. The ghosted list can help in identifying if an agent is
-ghosted in more than a rank. We have to delete ghost in such a way that
-the agent has only one ghost.
+The most important canniness in a full parallel implementation is that an agent must have at most one ghost. 
+In fact, if we had multiple ghosts, each of them would have its own history and we might end up with completely different ghosts of the same agent. We would therefore have to choose one of the ghosts to update the real agent. This choice would be difficult to make. Moreover, if it were possible to choose one of the ghosts, the other must be dropped, but they would have changed the history of other agents belonging to the ranks they were in. Therefore, to avoid distortion, we should undo the effect of the changes caused by the dropped ghosts. For these reason we think it convenient to allow for a unic ghost.
+The ghosted list can help in identifying if an agent is ghosted in more than a rank. 
+%We have to delete ghost in such a way that the agent has only one ghost.
 
-Now exchanges can be performed. Money holdings are accounted
+As before, the ghosted list is created by the \verb+request_agents(.. ..)+ function.
+Afterward, communication among ranks is mainly performed with the mpi function \verb+alltoall()+. Infact, if all ranks update at each time step this function is particularly useful. However, we have to learn how to setup its argument. For a better understanding, the following code display the argument of the function (i.e. the data sent) and its returned structure (i.e. the data received by ranks).
+
+The data to send is an array of arrays. 
+\begin{verbatim}
+rank 0 IDs to send to remove ghosts [[], [], [(0, 0, 0)], []]
+rank 1 IDs to send to remove ghosts [[], [], [], []]
+rank 2 IDs to send to remove ghosts [[], [], [], [(0, 0, 2), (2, 0, 2)]]
+rank 3 IDs to send to remove ghosts [[], [], [], []]
+\end{verbatim}
+Each array contains local agents IDs. The position of the array signal the rank to whom the array will be send.
+The first line of code shows that rank 0 will send agent (0,0,0) to rank 2. The third line shows that rank 2 will send two of its agents to rank 3.
+
+The received data is also an array of array.
+\begin{verbatim}
+rank 0 IDs received to remove ghosts [[], [], [], []]
+rank 1 IDs received to remove ghosts [[], [], [], []]
+rank 2 IDs received to remove ghosts [[(0, 0, 0)], [], [], []]
+rank 3 IDs received to remove ghosts [[], [], [(0, 0, 2), (2, 0, 2)], []]
+\end{verbatim}
+Now the position of the array signals the source rank of the agents. Therefore, the third line says that rank 2 receives agent (0,0,0) from rank 0. The fourth line says that rank 3 receives two agents from rank 2.
+
+In a sense, received data is a transpose of sent data.
+
+
+
+Once we ensure the ghosts uniqueness, exchanges can be performed as in the previous model: money holdings are accounted
 immediately after each exchange both for local agents and ghosts.
 
 \end{document}
