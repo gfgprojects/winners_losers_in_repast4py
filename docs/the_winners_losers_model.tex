@@ -621,7 +621,7 @@ The ghosted list can help in identifying if an agent is ghosted in more than a r
 %We have to delete ghost in such a way that the agent has only one ghost.
 
 As before, the ghosted list is created by the \verb+request_agents(.. ..)+ function.
-Afterward, communication among ranks is mainly performed with the mpi function \verb+alltoall()+. Infact, if all ranks update at each time step this function is particularly useful. However, we have to learn how to setup its argument. For a better understanding, the following code display the argument of the function (i.e. the data sent) and its returned structure (i.e. the data received by ranks).
+Afterward, communication among ranks is mainly performed with the mpi function \verb+alltoall()+. Infact, if all ranks update at each time step this function is particularly useful. For a correct use, we have to learn how to setup its argument. The following code display the argument of the function (i.e. the data sent) and its returned structure (i.e. the data received by ranks).
 
 The data to send is an array of arrays. 
 \begin{verbatim}
@@ -658,10 +658,30 @@ The following code fill the data structure each rank will send:
                     ghostsToBeRemoved[aRank].append(aKey)
 \end{verbatim}
 
-The array of arrays is named \verb+ghostsToBeRemoved+. For each ghosted agent, the dictionary \verb+ghost_ranks+ list the rank where the agent is ghosted. If this dictionary has more than one element, we select the element at position higher than zero as the rank where the ghosts of this agents will be deleted.
+The array of arrays is named \verb+ghostsToBeRemoved+. For each ghosted agent, the dictionary \verb+ghost_ranks+ lists the rank where the agent is ghosted. If this dictionary has more than one element, we select the element at position higher than zero as the rank where the ghosts of this agents will be deleted.
+
+Once the arrays are ready the \verb+alltoall()+ function is called:
+\begin{verbatim}
+      data=self.comm.alltoall(ghostsToBeRemoved)
+\end{verbatim}
+all ranks receive the data, and proceed to remove the ghosts with the following code:
+\begin{verbatim}
+        for rank, recvTuples in enumerate(data):
+            if recvTuples:
+                for aTuple in recvTuples:
+                    context._agent_manager.delete_ghost(aTuple)
+\end{verbatim}
 
 
-Once we ensure the ghosts uniqueness, exchanges can be performed as in the previous model: money holdings are accounted
+This code ensures ghosts uniqueness, therefore exchanges can be performed as in the previous model: money holdings are accounted
 immediately after each exchange both for local agents and ghosts.
+
+The original agents are then updated by collecting information from the ghost list and filling the \verb+messagesAfterInteraction+ list.
+
+These lists are then broadcast to other ranks using again the \verb+alltoall()+ function.
+
+The receiving rank updates original agents money holdings using the information received.
+
+   
 
 \end{document}
