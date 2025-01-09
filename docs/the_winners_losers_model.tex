@@ -216,13 +216,13 @@ The algorithm we will implement is the following:
     \begin{itemize}
     \tightlist
     \item
-	    Ra informs all other ranks that he selected Rb, its rank number and that the interaction is not local (MPI send)
+    Ra sends to all other ranks the following information: 1) the selected agent (Rb), 2) its rank number, and that 3) the interaction is not local (MPI send)
     \item
 	    all other ranks receive the new (MPI receive)
     \item
 	    Rb discover he was chosen and sets the chosen flag to allow point-to-point communications
 	    
-	    Rb gets ARb and extract its money holdings
+	    Rb gets ARb and learn its money holdings
       %ra requests the agent to rb (the ghost of the agent is created in rank1 say GAR2inR1)
     \item
 	    Rb send to Ra the info on ARb's money holdings (MPI send)
@@ -298,13 +298,13 @@ In the first time tick, it is randomly chooses as the acting agent. It chooses a
 In time tick 2 it is selected by agent 3 in rank 2 as a partner for interaction. Therefore rank 1 send information on agent's 2 money holding to rank 2.
 Rank 2 performs the computation and send back information on rank 1's agent's money holdings. Finally, rank 1 updates the agent's state.
 
-We highlight here the most relevant lines of code. They are contained in the step function.  
+We discuss hereafter the code relevant for inter rank communication. They can be found in the step function (see the \verb+01_wl.py+ file).  
 
-In case the agent with which to interact is in another rank, the first communication cannot be of the point-to-point type. In fact, in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore, in the first communication, the sending rank has to inform all the other rank of its decisions. To achieve this goal, in our implementation, the sending rank prepare a tuple 
+In case the agent with which to interact is in another rank, the first communication cannot be of the point-to-point type. In fact, in a point-to-point communication, the sending agent has to specify the target rank, and the receiving agent has to specify the rank from which he is receiving. While the sending rank knows the receiving rank, the receiving rank ignores that it was chosen. Therefore, in the first communication, the sending rank has to inform all the other ranks of its decisions. To achieve this goal, in our implementation, the sending rank prepare a tuple 
 \begin{verbatim}
 tupleToSend=(counterpartTuple,activeRank,interactionBetweenRanks)
 \end{verbatim}
-and send it to all the other ranks
+and send it to all the other ranks with the following code:
 \begin{verbatim}
 for aRank in self.otherRanks:
    self.comm.send(tupleToSend,aRank)
@@ -313,8 +313,8 @@ all the other ranks receive the sent tuple. They now know who is the requested a
 Analyzing the requested agent tuple, each rank can establish if it is involved. The code is as follows:
 \begin{verbatim}
 data=self.comm.recv(source=activeRank)  #receive data
-agTuple=data[0]                         #agent tuple
-interactionBetweenRanks=data[2]         #learn if thre is a between rank exchange
+agTuple=data[0]                         #requested agent tuple
+interactionBetweenRanks=data[2]         #learn if there is a between rank exchange
 if agTuple[2]==self.rank:               #establish if the rank is involved
     chosenFromOtherRanks=True           #set the involved variable
     talkingWith=data[1]                 #set the rank from which massages will be received
@@ -364,7 +364,7 @@ mpirun -n 4 python 01_wl_bcast.py
 
 \section{Model 1 parallel with ghosts}
 
-We will describe hereafter how to parallelize the model using Repast4py in full.
+We will describe hereafter how to parallelize the model using the Repast4py way.
 
 Till now, in case of interaction between two agents in two different ranks, the ranks send and receive information to allow their agents to update their states.
 
