@@ -385,7 +385,7 @@ The collected tuples are send back to the requesting rank
 	\item 
 		The requesting rank uses the received information to create agents. In particular, the rank creates an agent identical to the one which is in the rank for each received tuple. The newly created agents are called ghosts. They are stored in a dedicated list.
 	\item 
-		Afterwards, the interaction can be performed locally between the agent and a ghost. The ghost is taken from the rank's ghost list.
+		Afterwards, the interaction can be performed locally between the agent and a ghost. When a local agent is called to interact with a ghost, the ghost is taken from the rank's ghost list.
 \end{itemize}
 
 To make this mechanism work, the user has to perform two setups.
