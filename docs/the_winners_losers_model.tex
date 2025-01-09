@@ -396,16 +396,16 @@ Therefore, the user has to endow the agent with the save function. This function
 
 The second code integration consist in providing a function accessible at rank level whose role is to create new agents given a tuple with the same structure of \verb+save+ return. This function is the second input argument of \verb+request_agent+. The function can be named at the modeler convenience, however, the repast convention is to call it \verb+restore_agent(....)+   
 
-We report even in this case some significant lines of code.
+We report hereafter some significant lines of code showing how the mechanism is implemented.
 
-The agent's function save:
+The agent's function \verb+save()+:
 
 \begin{verbatim}
     def save(self) -> Tuple:
         return (self.uid,self.money)
 \end{verbatim}
 
-and the \verb+restore_agent+ function:
+and the \verb+restore_agent()+ function:
 
 \begin{verbatim}
 def restore_agent(agent_data: Tuple):
@@ -418,7 +418,7 @@ def restore_agent(agent_data: Tuple):
 
 
 In the step function, each rank fills a list of tuples we called \verb+agentsToBeRequested+.
-In our model only the active rank has an item in the list. The other ranks have empty lists.
+In this version of the model, only the active rank has an item in the list. The other ranks have empty lists.
 
 \begin{verbatim}
         agentsToBeRequested=[]
@@ -433,11 +433,11 @@ In our model only the active rank has an item in the list. The other ranks have 
                 agentsToBeRequested.append((counterpartTuple,counterpartRank))
         self.context.request_agents(agentsToBeRequested,restore_agent)
 \end{verbatim}
-The list is then used in the \verb+request_agents+ as the first argument. The second argument being the \verb+restore_agent+ function.
+The list is then used in the \verb+request_agents+ as the first argument. The second argument is the \verb+restore_agent+ function.
 
-The \verb+request_agents+ function populates two lists. The ghosts list and the ghosted list i.e. the list of local agents having ghosts. 
-In our model, in case of between rank interaction, the active rank has one element in the ghost list, while the other rank has one element in the ghosted list.
-In the following code, a rank learn it will be involved in the interaction checking the ghosted agents list. Because the ghosted list also record the rank where agents are ghosted, the rank also learn the rank with which it will interact. This will allows point-to-point interaction.
+The \verb+request_agents+ function populates two lists. The ghosts list and the ghosted list (the latter is the list of local agents having ghosts). 
+In our model, in case of inter rank interaction, the active rank has one element in the ghost list, while the other rank has one element in the ghosted list.
+Differently from the previous section, in the following code, a rank learn it will be involved in the interaction checking the ghosted agents list. Because the ghosted list also records the rank where agents are ghosted, the rank also learn the rank with which it will interact. This will allows point-to-point interaction.
 
 \begin{verbatim}
         if len(self.context._agent_manager._ghosted_agents)>0:
@@ -447,14 +447,14 @@ In the following code, a rank learn it will be involved in the interaction check
             talkingWith=list(ghostedAgent.ghost_ranks.keys())[0]
 \end{verbatim}
 
-The active rank takes the agent from the ghost list, gets the money level of the ghost, and decides the new allocation:
+To perform the interaction, the active rank takes the agent from the ghost list, gets the money level of the ghost, and decides the new allocation:
 \begin{verbatim}
 otherAgent=self.context.ghost_agent(counterpartTuple)     
 moneySum=aWL.money+otherAgent.money
 .. .. ..
 .. .. ..
 \end{verbatim}
-The two agents' money holdings are updated with MPI functions as in the previous case. We cannot use Repast functions because it does not provide function that updates the agents using the ghost status.
+The two agents' money holdings are updated with MPI functions as in the previous section. We cannot use Repast functions because it does not provide function that updates the agents using the ghost status.
 
 Finally, in this version we have to clear both the ghost and the ghosted list
 \begin{verbatim}
