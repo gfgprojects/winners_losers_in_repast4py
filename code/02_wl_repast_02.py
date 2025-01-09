@@ -182,10 +182,11 @@ class Model:
                 ghostRanksInExcess=talkingWith[1:len(talkingWith)]
                 for aRank in ghostRanksInExcess:
                     ghostsToBeRemoved[aRank].append(aKey)
-        print('please remove',ghostsToBeRemoved)
+        print('rank',str(self.rank),'IDs to send to remove ghosts',str(ghostsToBeRemoved))
         #=MPI================================================
         data=self.comm.alltoall(ghostsToBeRemoved)
         #====================================================
+        print('rank',str(self.rank),'IDs received to remove ghosts',str(data))
         for rank, recvTuples in enumerate(data):
             if recvTuples:
                 print('received from rank',str(rank),'tuples',str(recvTuples))
