@@ -170,7 +170,7 @@ Type \verb+python 01_wl_no_agents.py+ in a prompt terminal to run the script.
 
 \section{Model 1 not parallel with agents}
 
-code in \verb+01_wl_not_parallel_with_agents.py+.
+code in \verb+01_wl_not_parallel_with_agents.py+. (to be coded)
 
 \noindent command to run: \verb+python 01_wl_not_parallel_with_agents.py+.
 
@@ -355,7 +355,7 @@ data=self.comm.bcast(tupleToSend,root=activeRank)
 \end{verbatim}
 afterward, the code proceed as before.
 
-The version of the code using the \verb+bcast+ function in provided in the \verb+01_wl_bcast.py+ script.
+The version of the code using the \verb+bcast+ function is provided in the \verb+01_wl_bcast.py+ script.
 
 In case of running on 4 ranks, the command is:
 \begin{verbatim}
@@ -468,6 +468,15 @@ Finally, in this version we have to clear both the ghost and the ghosted list
             self.context._agent_manager.delete_ghost(otherAgent.uid)
 \end{verbatim}
 
+The version of the code with Repast ghosts is provided in the \verb+01_wl_repast.py+ script.
+
+In case of running on 4 ranks, the command is:
+\begin{verbatim}
+mpirun -n 4 python 01_wl_repast.py
+\end{verbatim}
+
+
+
 \section{Model 2 parallel implementation with ghosts}
 Model 2 is characterized by the fact that multiple agents perform interaction at each time step.
 We will give first an implementation in which agents in a single rank perform the interaction at each time step. Finally, we provide the full parallel implementation where the agents in all ranks perform the interaction at each time step.
@@ -513,7 +522,7 @@ The algorithm can be as follow:
 		  \item if counterpartRank is equal to current rank: perform local interaction and update money holdings of the two local agents
 		  \item else: perform interaction with ghost. Update the local and the ghost money variable.
 	  \end{itemize}
-	\item current rank perform a loop on the ghosts list to fill RL2 with ghost id and money holding
+	\item current rank performs a loop on the ghosts list to fill RL2 with ghost id and money holding
 	\item current rank broadcast RL2 
 	\item ranks different from current update original agents money holding using RL2
 	\item each rank clear ghost and ghosted lists
@@ -544,6 +553,14 @@ At each interaction, the acting agent updates both its money holding and its cou
 Note that the original agents are updated at the end of all the interactions. The list of messages to be send is filled with information taken from the ghosts.
 
 This allows ghosts, like local agents, be involved in several interactions. In this version of the model all the agents of the current rank has at least one interaction.
+
+This version of the code is provided in the \verb+02_wl_repast.py+ script.
+
+In case of running on 4 ranks, the command is:
+\begin{verbatim}
+mpirun -n 4 python 02_wl_repast.py
+\end{verbatim}
+
 
 
 \subsection{All ranks at a time}
@@ -617,14 +634,14 @@ In the model of the previous section, the following if conditions
 makes a rank updating at a time. We remove all the if statement to achieve the present full parallel implementation.
 
 The most important canniness in a full parallel implementation is that an agent must have at most one ghost. 
-In fact, if we had multiple ghosts, each of them would have its own history and we might end up with completely different ghosts of the same agent. We would therefore have to choose one of the ghosts to update the real agent. This choice would be difficult to make. Moreover, if it were possible to choose one of the ghosts, the other must be dropped, but they would have changed the history of other agents belonging to the ranks they were in. Therefore, to avoid distortion, we should undo the effect of the changes caused by the dropped ghosts. For these reason we think it convenient to allow for a unic ghost.
+In fact, if we had multiple ghosts, each of them would have its own history and we might end up with completely different ghosts of the same agent. We would therefore have to choose one of the ghosts to update the real agent. This choice would be difficult to make. Moreover, if it were possible to choose one of the ghosts, the other must be dropped, but they would have changed the history of other agents belonging to the ranks they were in. Therefore, to avoid distortions, we should undo the effect of the changes caused by the dropped ghosts. For these reason we think it convenient to allow for a unic ghost.
 The ghosted list can help in identifying if an agent is ghosted in more than a rank. 
 %We have to delete ghost in such a way that the agent has only one ghost.
 
 As before, the ghosted list is created by the \verb+request_agents(.. ..)+ function.
 Afterward, communication among ranks is mainly performed with the mpi function \verb+alltoall()+. Infact, if all ranks update at each time step this function is particularly useful. For a correct use, we have to learn how to setup its argument. The following code display the argument of the function (i.e. the data sent) and its returned structure (i.e. the data received by ranks).
 
-The data to send is an array of arrays. 
+The data to send must be an array of arrays. 
 \begin{verbatim}
 rank 0 IDs to send to remove ghosts [[], [], [(0, 0, 0)], []]
 rank 1 IDs to send to remove ghosts [[], [], [], []]
@@ -632,7 +649,7 @@ rank 2 IDs to send to remove ghosts [[], [], [], [(0, 0, 2), (2, 0, 2)]]
 rank 3 IDs to send to remove ghosts [[], [], [], []]
 \end{verbatim}
 Each array contains local agents IDs. The position of the array signal the rank to whom the array will be send.
-The first line of code shows that rank 0 will send agent (0,0,0) to rank 2. The third line shows that rank 2 will send two of its agents to rank 3.
+The first line of the above code shows that rank 0 will send agent (0,0,0) to rank 2. The third line shows that rank 2 will send two of its agents to rank 3.
 
 The received data is also an array of array.
 \begin{verbatim}
@@ -682,6 +699,14 @@ The original agents are then updated by collecting information from the ghost li
 These lists are then broadcast to other ranks using again the \verb+alltoall()+ function.
 
 The receiving rank updates original agents money holdings using the information received.
+
+This version of the code is provided in the \verb+02_wl_repast_02.py+ script.
+
+In case of running on 4 ranks, the command is:
+\begin{verbatim}
+mpirun -n 4 python 02_wl_repast_02.py
+\end{verbatim}
+
 
    
 
