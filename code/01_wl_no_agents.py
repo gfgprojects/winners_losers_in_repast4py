@@ -9,7 +9,8 @@ import random
 import matplotlib.pyplot as plt
 import time
 
-verboseFlag=True
+#verboseFlag=True
+verboseFlag=False
 if verboseFlag:
     N=3
     iterations=10
