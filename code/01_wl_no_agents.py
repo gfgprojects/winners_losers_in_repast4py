@@ -9,6 +9,13 @@ import random
 import matplotlib.pyplot as plt
 import time
 
+verboseFlag=True
+if verboseFlag:
+    N=3
+    iterations=10
+else:
+    N=2400
+    iterations=480000
 
 print()
 print('Going to run the winners-losers model with 480000 exchanges')
@@ -25,28 +32,30 @@ elapsedTime=T();
 
 random.seed(123)
 
-N=2400
-
 v=[1]*N
+if verboseFlag: print('wealth at beginning',str(sum(v)))
 
-for i in range (480000):
+for i in range (iterations):
     a=random.randrange(N)
     b=random.randrange(N)
-
-    tot=v[a]+v[b]
-
-    q=random.random()
-
-    v[a]=q*tot
-
-    v[b]=(1-q)*tot
+    if a!=b:
+        tot=v[a]+v[b]
+        q=random.random()
+        v[a]=q*tot
+        v[b]=(1-q)*tot
+        if verboseFlag: print('total',str(tot),'to position',str(a),':',str(v[a]),'to position',str(b),':',str(v[b]))
+    else:
+        if verboseFlag: print("same position selected")
 
 elapsedTime=T();
 print()
-print('seconds elapsed since beginning: ',str(round(elapsedTime,2)))
+if verboseFlag: print('seconds elapsed since beginning: ',str(round(elapsedTime,2)))
 print()
 
-#plt.hist(v,200);
-#plt.show()
+if verboseFlag: print('wealth at end',str(sum(v)))
+
+if not verboseFlag:
+    plt.hist(v,200);
+    plt.show()
 
 
