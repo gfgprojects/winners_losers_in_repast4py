@@ -18,7 +18,7 @@ else:
     iterations=480000
 
 print()
-print('Going to run the winners-losers model with 480000 exchanges')
+print(f'Going to run the winners-losers model with {iterations} exchanges')
 
 #timer T()
 startTime=-1
@@ -43,9 +43,9 @@ for i in range (iterations):
         q=random.random()
         v[a]=q*tot
         v[b]=(1-q)*tot
-        if verboseFlag: print('total',str(tot),'to position',str(a),':',str(v[a]),'to position',str(b),':',str(v[b]))
+        if verboseFlag: print(f'tick {i} total {tot}. To position {a}:{v[a]}, to position {b}: {v[b]}')
     else:
-        if verboseFlag: print("same position selected")
+        if verboseFlag: print(f"tick {i} same position selected")
 
 elapsedTime=T();
 print()
